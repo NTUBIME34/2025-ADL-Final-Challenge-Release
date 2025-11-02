@@ -8,14 +8,14 @@ import sys
 
 # --- Configuration ---
 DEFAULT_ALGORITHM_NAME = PromptSafetyAgent.MANDATORY_ENTRY_POINT
-DEFAULT_DATASET_PATH = "theblackcat102/ADL_Final_25W_part1"
+DEFAULT_DATASET_PATH = "theblackcat102/ADL_Final_25W_part1_with_cost"
 
 def _get_common_args():
     """Parses command-line arguments, same as eval script."""
     parser = argparse.ArgumentParser(description="Run the INFERENCE step for a prompt safety algorithm.")
     
     parser.add_argument(
-        '--dataset-path',
+        '--dataset',
         type=str,
         default=DEFAULT_DATASET_PATH, 
         help=f"Path to the Hugging Face dataset. Default: {DEFAULT_DATASET_PATH}"
@@ -32,7 +32,7 @@ def _get_common_args():
 def _get_file_paths(args):
     """Generates consistent file paths based on args."""
     ALGORITHM_NAME = args.algorithm
-    DATASET_NAME = args.dataset_path.split("/")[-1].split(".")[0]
+    DATASET_NAME = args.dataset.split("/")[-1].split(".")[0]
     OUTPUT_DIR = f'results/{ALGORITHM_NAME}'
     
     # This file stores ONLY the rewritten prompts (strings)
@@ -54,12 +54,22 @@ def _load_original_dataset(DATASET_PATH: str) -> Dataset:
             dataset_dict = load_dataset('json', data_files=DATASET_PATH)
         else:
             raise ValueError(f"Unsupported single file type: {file_extension}. Must be .jsonl or a directory/Hub ID.")
-    elif (not os.path.isdir(DATASET_PATH)) or DATASET_PATH == DEFAULT_DATASET_PATH:
-        print("Detected directory or Hugging Face Hub ID. Loading conventionally.")
-        dataset_dict = load_dataset(DATASET_PATH)
+    elif os.path.exists(DATASET_PATH):
+        print(f"Detected local path at {DATASET_PATH}. Attempting to load locally.")
+        if os.path.isfile(DATASET_PATH):
+            ext = DATASET_PATH.split('.')[-1]
+            if ext == 'jsonl':
+                dataset_dict = load_dataset('json', data_files=DATASET_PATH)
+            else:
+                raise ValueError(f"Unsupported file type for local dataset: {ext}")
+        else:
+            dataset_dict = load_dataset(DATASET_PATH)
     else:
-        print('what??')
-        raise FileNotFoundError(f"Path not found: {DATASET_PATH}")
+        print(f"Local path not found: {DATASET_PATH}. Attempting to load from Hugging Face Hub...")
+        try:
+            dataset_dict = load_dataset(DATASET_PATH)
+        except Exception as e:
+            raise FileNotFoundError(f"Dataset not found locally or on Hugging Face Hub: {DATASET_PATH}. Error: {e}")
 
     split_name = list(dataset_dict.keys())[0]
     ds: Dataset = dataset_dict[split_name]
@@ -79,12 +89,12 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     print(f"--- Running INFERENCE for Algorithm: {args.algorithm} ---")
-    print(f"Dataset Path: {args.dataset_path}")
+    print(f"Dataset Path: {args.dataset}")
     print(f"Output File: {INFERENCE_FILE}")
 
     # 1. Initialization: Data and Agent
     try:
-        ds, split_name = _load_original_dataset(args.dataset_path)
+        ds, split_name = _load_original_dataset(args.dataset)
         agent = PromptSafetyAgent(args.algorithm)
         
     except Exception as e:

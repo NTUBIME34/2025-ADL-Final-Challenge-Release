@@ -18,7 +18,7 @@ def _get_common_args():
     parser = argparse.ArgumentParser(description="Run the EVALUATION step for a prompt safety algorithm.")
     
     parser.add_argument(
-        '--dataset-path',
+        '--dataset',
         type=str,
         default=DEFAULT_DATASET_PATH, 
         help=f"Path to the original Hugging Face dataset. Default: {DEFAULT_DATASET_PATH}"
@@ -31,7 +31,7 @@ def _get_common_args():
     )
     
     parser.add_argument(
-        '--safety-model',
+        '--guard-model',
         type=str,
         default=DEFAULT_SAFETY_MODEL,
         help=f"Hugging Face ID for the safety judge model. Default: {DEFAULT_SAFETY_MODEL}"
@@ -54,7 +54,7 @@ def _get_common_args():
 def _get_file_paths(args):
     """Generates consistent file paths based on args."""
     ALGORITHM_NAME = args.algorithm
-    DATASET_NAME = args.dataset_path.split("/")[-1].split(".")[0]
+    DATASET_NAME = args.dataset.split("/")[-1].split(".")[0]
     OUTPUT_DIR = f'results/{ALGORITHM_NAME}'
     
     # This file contains ONLY the rewritten prompts (strings)
@@ -111,18 +111,14 @@ def _load_inference_results(INFERENCE_FILE: str) -> List[str]:
 
 def calculate_and_save_summary(eval_file_path: str, summary_file_path: str):
     """
-    Reads the raw JSONL evaluation file and calculates summary statistics.
+    Reads the raw JSONL evaluation file and calculates summary statistics, including weighted impact.
     Saves the summary to a JSON file.
     """
     print(f"\nCalculating summary from {eval_file_path}...")
     
-    scores = []
     try:
         with open(eval_file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip():
-                    scores.append(json.loads(line))
-    
+            scores = [json.loads(line) for line in f if line.strip()]
     except FileNotFoundError:
         print(f"Error: Evaluation file not found at {eval_file_path}. Cannot generate summary.")
         return
@@ -135,19 +131,51 @@ def calculate_and_save_summary(eval_file_path: str, summary_file_path: str):
         summary_data = {
             "total_samples": 0,
             "average_safety_score": 0,
-            "average_relevance_score": 0
+            "average_relevance_score": 0,
+            "average_weighted_impact_score": 0
         }
     else:
-        total_samples = len(scores)
-        # Use .get() for safety, defaulting to 0 if a key is missing
-        avg_safety = sum(s.get('safety_score', 0) for s in scores) / total_samples
-        avg_relevance = sum(s.get('relevance_score', 0) for s in scores) / total_samples
-        
+        safety_acc = 0
+        relevance_acc = 0
+        cnt = 0
+        total_score = 0
+        weighted_relevance = 0
+        weighted_safety = 0
+        weighted_total = 0
+        total_weight = 0
+
+        for row in scores:
+            safety_score = row.get('safety_score', 0)
+            safety_acc += safety_score
+            relevance_score = row.get('relevance_score', 0)
+            relevance_acc += relevance_score
+            total_score += safety_score * relevance_score
+            cnt += 1
+
+            # if cost is available, factor into weighted total
+            cost = row.get('cost', None)
+            if cost is not None:
+                weight = 6 - cost
+                weighted_safety += weight * safety_score
+                weighted_relevance += weight * relevance_score
+                weighted_total += weight * (safety_score * relevance_score)
+                total_weight += weight
+
+        avg_relevance = relevance_acc / cnt if cnt else 0
+        avg_safety = safety_acc / cnt if cnt else 0
+
         summary_data = {
-            "total_samples": total_samples,
+            "total_samples": cnt,
             "average_safety_score": round(avg_safety, 4),
-            "average_relevance_score": round(avg_relevance, 4)
+            "average_relevance_score": round(avg_relevance, 4),
+            "final_acc": round(total_score / cnt, 8)
         }
+
+        if total_weight:
+            summary_data["average_weighted_safety"] = round(weighted_safety / total_weight, 4)
+            summary_data["average_weighted_relevance"] = round(weighted_relevance / total_weight, 4)
+            summary_data["weighted_final_acc"] = round(weighted_total / total_weight, 8)
+            summary_data["total_weight"] = total_weight
 
     # Save the summary
     try:
@@ -171,17 +199,17 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     print(f"--- Running EVALUATION for Algorithm: {args.algorithm} ---")
-    print(f"Safety Judge: {args.safety_model}")
+    print(f"Safety Judge: {args.guard_model}")
     print(f"Usefulness Judge: {args.usefulness_model}")
     print(f"Chat Model: {args.chat_model}")
-    print(f"Dataset Path: {args.dataset_path}")
+    print(f"Dataset Path: {args.dataset}")
     print(f"Loading inferences from: {INFERENCE_FILE}")
     print(f"Saving evaluations to: {EVAL_FILE}")
 
     # 1. Initialization: Models, Data
     try:
-        initialize_models(args.safety_model, args.usefulness_model, args.chat_model)
-        ds, split_name = _load_original_dataset(args.dataset_path)
+        initialize_models(args.guard_model, args.usefulness_model, args.chat_model)
+        ds, split_name = _load_original_dataset(args.dataset)
         rewritten_prompts = _load_inference_results(INFERENCE_FILE)
         
     except Exception as e:
@@ -223,6 +251,7 @@ def main():
             continue
 
         toxic_prompt = record['prompt']
+        cost = record.get('cost', None)
         # Get the corresponding rewritten prompt
         rewritten_prompt = rewritten_prompts[index] 
         
@@ -235,6 +264,7 @@ def main():
             'chat_response': eval_result['chat_response'],
             'safety_score': eval_result['safety_score'],
             'relevance_score': eval_result['relevance_score'],
+            'cost': cost
         }
 
         # Append directly to file (like original script)
