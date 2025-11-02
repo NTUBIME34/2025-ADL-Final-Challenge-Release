@@ -9,7 +9,7 @@ import sys
 # --- Configuration ---
 DEFAULT_DATASET_PATH = "theblackcat102/ADL_Final_25W_part1"
 DEFAULT_SAFETY_MODEL = "Qwen/Qwen3Guard-Gen-0.6B"
-DEFAULT_USEFULNESS_MODEL = "theblackcat102/Toxic-usefulness-Qwen-1.7B-beta"
+DEFAULT_USEFULNESS_MODEL = "theblackcat102/Qwen3-1.7B-Usefulness-Judge"
 DEFAULT_CHAT_MODEL = "unsloth/Llama-3.2-3B-Instruct"
 DEFAULT_ALGORITHM_NAME = "evaluate_rewrite"
 
@@ -79,7 +79,7 @@ def _load_original_dataset(DATASET_PATH: str) -> Dataset:
             dataset_dict = load_dataset('json', data_files=DATASET_PATH)
         else:
             raise ValueError(f"Unsupported single file type: {file_extension}. Must be .jsonl or a directory/Hub ID.")
-    elif os.path.isdir(DATASET_PATH) or DATASET_PATH == DEFAULT_DATASET_PATH:
+    elif (not os.path.isdir(DATASET_PATH)) or DATASET_PATH == DEFAULT_DATASET_PATH:
         print("Detected directory or Hugging Face Hub ID. Loading conventionally.")
         dataset_dict = load_dataset(DATASET_PATH)
     else:

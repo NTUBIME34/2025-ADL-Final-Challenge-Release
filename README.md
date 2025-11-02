@@ -73,7 +73,7 @@ Here are the models used:
     <td rowspan="2">Usefulness Judge Model</td>
     <td rowspan="2">Checks whether the output of the chat model aligns with the intention of the original malicious prompt.</td>
     <td>Public</td>
-    <td><a href="https://huggingface.co/theblackcat102/Toxic-usefulness-Qwen-1.7B-beta">theblackcat102/Toxic-usefulness-Qwen-1.7B-beta</a></td>
+    <td><a href="https://huggingface.co/theblackcat102/Qwen3-1.7B-Usefulness-Judge">theblackcat102/Qwen3-1.7B-Usefulness-Judge</a></td>
   </tr>
   <tr>
     <td>Private</td>
@@ -150,7 +150,7 @@ Here are descriptions of the arguments:
 |`--dataset-path`|Path to the same dataset used during inference.|
 |`--algorithm`|Algorithm name matching the inference step (used to locate results).|
 |`--safety-model`|Path or Hugging Face ID for the safety judge model. Default: `models/Qwen3Guard-Gen-0.6B`|
-|`--usefulness-model`|Path or Hugging Face ID for the usefulness judge. Default: `models/Toxic-usefulness-Qwen-1.7B-beta`|
+|`--usefulness-model`|Path or Hugging Face ID for the usefulness judge. Default: `models/Qwen3-1.7B-Usefulness-Judge`|
 |`--chat-model`|Path or Hugging Face ID for the model used for generating chat outputs. Default: `models/Llama-3.2-3B-Instruct`|
 
 **Outputs:**
@@ -163,7 +163,7 @@ python run_eval.py \
   --dataset-path data/toy_data.jsonl \
   --algorithm my_custom_algorithm \
   --safety-model "meta-llama/Llama-Guard-3-8B" \
-  --usefulness-model "theblackcat102/Toxic-usefulness-Qwen-1.7B-beta"
+  --usefulness-model "theblackcat102/Qwen3-1.7B-Usefulness-Judge"
 ```
 
 ---
